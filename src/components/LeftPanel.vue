@@ -250,7 +250,9 @@ function toggleAllLayer1(e) {
       <!-- Авторизация и ЛК -->
       <template v-if="!isLoggedIn">
         <button class="reset-btn auth-link" @click="openAuth">Вход / Регистрация</button>
-      </template>
+        
+</template> 
+      
       <template v-else>
         <div class="profile-bar-minimal">
           <button class="profile-icon-btn" @click="goToProfile" title="Личный кабинет">
@@ -583,7 +585,7 @@ input[type="checkbox"]:indeterminate {
   background: #fafbfc;
   border-radius: 22px;
   padding: 0 14px;
-  margin-bottom: 16px;
+  margin: 16px;
   height: 44px;
   box-shadow: 0 2px 8px 0 #24252912;
 }

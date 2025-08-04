@@ -16,24 +16,28 @@
       <div class="sidebar-section"><b>Адрес:</b> {{ org.address }}</div>
       <div class="sidebar-section"><b>Телефон:</b> {{ org.phone }}</div>
       <div class="sidebar-section"><b>Сайт:</b> <a :href="org.website" target="_blank">{{ org.website }}</a></div>
-
-      <!-- КОНКРЕТНЫЕ ПОЛЯ -->
       <div class="sidebar-section"><b>Форма:</b> {{ org.rehab_form }}</div>
       <div class="sidebar-section"><b>Возрастная группа:</b> {{ org.age_group }}</div>
       <div class="sidebar-section"><b>Доступная среда:</b> {{ org.accessibility }}</div>
-      <div class="sidebar-section"><b>Профиль:</b> {{ org.profile }}</div>
+      
+      <!-- ПРОФИЛЬ КАК СПИСОК -->
+      <div class="sidebar-section">
+        <b>Профиль:</b>
+        <ul v-if="org.profile">
+          <li v-for="(item, i) in parseList(org.profile)" :key="i">{{ item }}</li>
+        </ul>
+      </div>
+
       <div class="sidebar-section"><b>Перечень услуг:</b>
         <ul v-if="org.services">
-          <li v-for="(service, i) in org.services.split('\n')" :key="i">{{ service }}</li>
+          <li v-for="(service, i) in parseList(org.services)" :key="i">{{ service }}</li>
         </ul>
       </div>
       <div class="sidebar-section"><b>Перечень специалистов:</b>
         <ul v-if="org.specialists">
-          <li v-for="(spec, i) in org.specialists.split('\n')" :key="i">{{ spec }}</li>
+          <li v-for="(spec, i) in parseList(org.specialists)" :key="i">{{ spec }}</li>
         </ul>
       </div>
-
-      
     </div>
   </div>
 </template>
@@ -41,7 +45,23 @@
 <script setup>
 defineProps(['org'])
 defineEmits(['close'])
+
+// Универсальный парсер для разных вариантов формата (строка или массив)
+function parseList(val) {
+  if (Array.isArray(val)) {
+    return val.filter(Boolean)
+  }
+  if (typeof val === 'string') {
+    // делим по \n или запятым, точкам с запятой — если нужно, можно подправить
+    return val.split(/\n|,|;/).map(x => x.trim()).filter(Boolean)
+  }
+  return []
+}
 </script>
+
+
+
+
 
 <style scoped>
 
