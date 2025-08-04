@@ -3,7 +3,6 @@ import { ref, watch, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import AuthModal from './AuthModal.vue'
 
-// Новая структура слоёв и групп
 const LAYER_GROUPS = [
   {
     label: 'Министерство просвещения Р.Б.',
@@ -20,7 +19,6 @@ const LAYER_GROUPS = [
   { key: 'layer5', label: 'Министерство семьи, труда и социальной защиты населения Р.Б.' }
 ]
 
-// Остальное без изменений
 const MINISTRIES = [
   'Министерство просвещения Р.Б.',
   'Министерство спорта Р.Б.',
@@ -29,17 +27,22 @@ const MINISTRIES = [
   'Министерство семьи, труда и социальной защиты населения Р.Б.'
 ]
 
+// Только 0-18 и 18+
+const ageGroupsOptions = ['0-18', '18+']
+
 const props = defineProps({
   visibleLayers: { type: Object, required: true },
   ageGroups: { type: [Array, Object], default: () => [] },
   accessibility: { type: [Array, Object], default: () => [] },
   allAgeGroups: { type: Array, required: true },
-  allOrganizations: { type: Array, default: () => [] }
+  allOrganizations: { type: Array, default: () => [] },
+  svo: { type: [Array, Object], default: () => [] }
 })
 
 const emit = defineEmits([
   'update:ageGroups',
   'update:accessibility',
+  'update:svo',
   'search',
   'selectOrg',
   'collapse'
@@ -47,14 +50,68 @@ const emit = defineEmits([
 
 const localAgeGroups = ref([...props.ageGroups])
 const localAccessibilityEnabled = ref(props.accessibility.includes('Да'))
+const svoEnabled = ref(!!(props.svo && props.svo.includes('Да')))
 
-// ROUTER
+// sync props on change
+watch(() => props.ageGroups, val => {
+  localAgeGroups.value = [...val]
+})
+watch(() => props.accessibility, val => {
+  localAccessibilityEnabled.value = val.includes('Да')
+})
+watch(() => props.svo, val => {
+  svoEnabled.value = !!(val && val.includes('Да'))
+})
+
+function toggleLocalAgeGroup(val) {
+  const arr = [...localAgeGroups.value]
+  if (arr.includes(val)) {
+    if (arr.length > 1) {
+      arr.splice(arr.indexOf(val), 1)
+    }
+    // если 1, не снимаем галку!
+  } else {
+    arr.push(val)
+  }
+  localAgeGroups.value = arr
+}
+
+
+function toggleAccessibility() {
+  localAccessibilityEnabled.value = !localAccessibilityEnabled.value
+}
+function toggleSvo() {
+  svoEnabled.value = !svoEnabled.value
+}
+function applyFilters() {
+  if (localAgeGroups.value.length === 0) {
+    localAgeGroups.value = [...ageGroupsOptions]
+  }
+  emit('update:ageGroups', localAgeGroups.value)
+  emit('update:accessibility', localAccessibilityEnabled.value ? ['Да'] : [])
+  emit('update:svo', svoEnabled.value ? ['Да'] : [])
+}
+function resetFilters() {
+  localAgeGroups.value = [...ageGroupsOptions]
+  localAccessibilityEnabled.value = false
+  svoEnabled.value = false
+  applyFilters()
+}
+
+const hasChanges = computed(() => {
+  const originalAge = [...props.ageGroups].sort().join(',')
+  const localAge = [...localAgeGroups.value].sort().join(',')
+  const originalAcc = props.accessibility.includes('Да')
+  const localAcc = localAccessibilityEnabled.value
+  const originalSvo = (props.svo || []).includes('Да')
+  const localSvoVal = svoEnabled.value
+  return originalAge !== localAge || originalAcc !== localAcc || originalSvo !== localSvoVal
+})
+
+// Авторизация, пользователь
 const router = useRouter()
-
-// USER STATE
 const userEmail = ref('')
 const isLoggedIn = computed(() => !!userEmail.value)
-
 function loadUser() {
   const token = localStorage.getItem('user_token')
   const email = localStorage.getItem('user_email')
@@ -66,12 +123,10 @@ function loadUser() {
 }
 onMounted(loadUser)
 
-// AUTH MODAL
 const showAuthModal = ref(false)
 const isLoginTab = ref(true)
 const authError = ref('')
 const authLoading = ref(false)
-
 function openAuth() {
   showAuthModal.value = true
   isLoginTab.value = true
@@ -81,7 +136,7 @@ function closeAuth() {
   authError.value = ''
 }
 async function handleLogin({ email, password }) {
-  authLoading.value = true
+  authLoading.value = true;
   try {
     const response = await fetch('http://136.169.171.150:8888/api/login', {
       method: 'POST',
@@ -92,10 +147,20 @@ async function handleLogin({ email, password }) {
       const data = await response.json()
       localStorage.setItem('user_token', data.token)
       localStorage.setItem('user_email', email)
+      localStorage.setItem('user_type', data.type)
+      if (data.ministry) {
+        localStorage.setItem('user_ministry', data.ministry)
+      } else {
+        localStorage.removeItem('user_ministry')
+      }
       userEmail.value = email
       showAuthModal.value = false
       authError.value = ''
-      router.push('/profile')
+      if (data.type === 'ministry-admin') {
+        router.push('/ministry-admin-profile')
+      } else {
+        router.push('/profile')
+      }
     } else {
       const err = await response.json()
       authError.value = err?.error || 'Ошибка входа'
@@ -119,10 +184,14 @@ function logout() {
   router.push('/')
 }
 function goToProfile() {
-  router.push('/profile')
+  const userType = localStorage.getItem('user_type')
+  if (userType === 'ministry-admin') {
+    router.push('/ministry-admin-profile')
+  } else {
+    router.push('/profile')
+  }
 }
 
-// SEARCH
 const searchInput = ref('')
 const showDropdown = ref(false)
 const searchResults = computed(() => {
@@ -153,68 +222,13 @@ function selectOrgFromDropdown(org) {
   searchInput.value = org.name
 }
 
-// FILTERS
-const hasChanges = computed(() => {
-  const originalAge = [...props.ageGroups].sort().join(',')
-  const localAge = [...localAgeGroups.value].sort().join(',')
-  const originalAcc = props.accessibility.includes('Да')
-  const localAcc = localAccessibilityEnabled.value
-  return originalAge !== localAge || originalAcc !== localAcc
-})
-
-watch(() => props.ageGroups, val => {
-  localAgeGroups.value = [...val]
-})
-watch(() => props.accessibility, val => {
-  localAccessibilityEnabled.value = val.includes('Да')
-})
-
-function toggleLocalAgeGroup(val) {
-  const arr = [...localAgeGroups.value]
-  if (arr.includes(val)) {
-    arr.splice(arr.indexOf(val), 1)
-  } else {
-    arr.push(val)
-  }
-  if (arr.length === 0) {
-    localAgeGroups.value = [...props.allAgeGroups]
-  } else {
-    localAgeGroups.value = arr
-  }
-}
-function toggleAccessibility() {
-  localAccessibilityEnabled.value = !localAccessibilityEnabled.value
-}
-function applyFilters() {
-  if (localAgeGroups.value.length === 0) {
-    localAgeGroups.value = [...props.allAgeGroups]
-  }
-  emit('update:ageGroups', localAgeGroups.value)
-  emit('update:accessibility', localAccessibilityEnabled.value ? ['Да'] : [])
-}
-function cancelFilters() {
-  localAgeGroups.value = [...props.ageGroups]
-  localAccessibilityEnabled.value = props.accessibility.includes('Да')
-}
-function resetFilters() {
-  localAgeGroups.value = [...props.allAgeGroups]
-  localAccessibilityEnabled.value = false
-  applyFilters()
-}
-
-// ---------------------
-// Логика вложенных чекбоксов для layer1
-// ---------------------
 const LAYER1_KEYS = ['layer1_1', 'layer1_2', 'layer1_3']
-
 const allLayer1Checked = computed(() =>
   LAYER1_KEYS.every(key => props.visibleLayers[key])
 )
-
 const someLayer1Checked = computed(() =>
   LAYER1_KEYS.some(key => props.visibleLayers[key])
 )
-
 function toggleAllLayer1(e) {
   const val = e.target.checked
   LAYER1_KEYS.forEach(key => {
@@ -289,7 +303,6 @@ function toggleAllLayer1(e) {
       <!-- Ведомства -->
       <div class="panel-section">
         <div class="section-title">Ведомства</div>
-        <!-- Группированный чекбокс для Министерство просвещения Р.Б. -->
         <div class="checkbox-row parent-checkbox">
           <input
             type="checkbox"
@@ -309,7 +322,6 @@ function toggleAllLayer1(e) {
             {{ child.label }}
           </label>
         </div>
-        <!-- Остальные ведомства -->
         <label
           v-for="group in LAYER_GROUPS.slice(1)"
           :key="group.key"
@@ -323,31 +335,45 @@ function toggleAllLayer1(e) {
       <hr class="panel-divider" />
 
       <!-- Фильтры -->
-      <div class="panel-section">
-        <div class="panel-header">
-          <span class="panel-title">Фильтры</span>
-          <button class="reset-btn" @click="resetFilters">Сбросить</button>
-        </div>
+<div class="panel-section">
+  <div class="panel-header">
+    <span class="panel-title">Фильтры</span>
+    <button class="reset-btn" @click="resetFilters">Сбросить</button>
+  </div>
 
-        <div class="section-title">Возрастная группа</div>
-        <div class="age-checkbox-row">
-          <label v-for="val in props.allAgeGroups" :key="val" class="checkbox-inline">
-            <input
-              type="checkbox"
-              :value="val"
-              :checked="localAgeGroups.includes(val)"
-              @change="toggleLocalAgeGroup(val)"
-            />
-            {{ val }}
-          </label>
-        </div>
-      </div>
+  <div class="section-title">Возрастная группа</div>
+  <div class="age-checkbox-row">
+    <label v-for="val in props.allAgeGroups" :key="val" class="checkbox-inline">
+      <input
+        type="checkbox"
+        :value="val"
+        :checked="localAgeGroups.includes(val)"
+        :disabled="localAgeGroups.length === 1 && localAgeGroups[0] === val"
+        @change="toggleLocalAgeGroup(val)"
+      />
+      {{ val }}
+    </label>
+  </div>
+</div>
 
-      <div class="panel-section">
+
+      <div class="panel-section"> <br>
         <div class="section-title">Доступная среда</div>
         <button
           @click="toggleAccessibility"
           :class="['accessibility-btn', { selected: localAccessibilityEnabled }]"
+          type="button"
+        >
+          Да
+        </button>
+      </div>
+
+      <!-- Новый фильтр по СВО -->
+      <div class="panel-section"><br>
+        <div class="section-title">Участник СВО</div>
+        <button
+          @click="toggleSvo"
+          :class="['svo-btn', { selected: svoEnabled }]"
           type="button"
         >
           Да
@@ -365,7 +391,6 @@ function toggleAllLayer1(e) {
         </button>
       </div>
 
-      <!-- Модалка авторизации -->
       <AuthModal
         :show="showAuthModal"
         :isLogin="isLoginTab"
@@ -381,7 +406,41 @@ function toggleAllLayer1(e) {
   </transition>
 </template>
 
+
+
+
 <style scoped>
+.svo-btn {
+  border: 1.5px solid #a1aeb8;
+  border-radius: 8px;
+  padding: 5px 16px;
+  background: #f5f6fa;
+  color: #333;
+  font-size: 15px;
+  cursor: pointer;
+  margin-top: 6px;
+  outline: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.svo-btn.selected {
+  background: #e5ffe6;
+  color: #36c900;
+  border-color: #36c900;
+  font-weight: bold;
+}
+
+.svo-radio-row {
+  display: flex;
+  gap: 20px;
+  margin-top: 7px;
+}
+.radio-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+}
+
 .profile-bar-minimal {
   display: flex;
   align-items: center;

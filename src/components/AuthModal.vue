@@ -8,40 +8,40 @@ const props = defineProps({
   error: String,
   ministries: { type: Array, default: () => [] }
 })
-
 const emit = defineEmits(['close', 'login', 'register', 'switchTab'])
 
 const loginEmail = ref('')
 const loginPassword = ref('')
+const localError = ref('')
 
-const regEmail = ref('')
-const regPassword = ref('')
-const regPasswordRepeat = ref('')
+const registrationTab = ref('org') // org | ministry
+
 const regName = ref('')
 const regMinistry = ref('')
 const regContactName = ref('')
 const regContactPhone = ref('')
-
-const localError = ref('')
+const regEmail = ref('')
+const regPassword = ref('')
+const regPasswordRepeat = ref('')
 const registrationSuccess = ref(false)
 
 watch(() => props.show, show => {
   if (!show) {
     loginEmail.value = ''
     loginPassword.value = ''
-    regEmail.value = ''
-    regPassword.value = ''
-    regPasswordRepeat.value = ''
+    localError.value = ''
+    registrationTab.value = 'org'
     regName.value = ''
     regMinistry.value = ''
     regContactName.value = ''
     regContactPhone.value = ''
-    localError.value = ''
+    regEmail.value = ''
+    regPassword.value = ''
+    regPasswordRepeat.value = ''
     registrationSuccess.value = false
   }
 })
 
-// Маска телефона: +7 (___) ___-__-__
 function onPhoneInput(e) {
   let value = e.target.value.replace(/\D/g, '')
   if (value.startsWith('7')) value = value.slice(1)
@@ -55,20 +55,37 @@ function onPhoneInput(e) {
   regContactPhone.value = masked
 }
 
-// Проверка сложности пароля
 function isStrongPassword(password) {
-  // минимум 6 символов, хотя бы 1 буква и 1 цифра
   return /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{6,}$/.test(password)
 }
 
 function handleLogin() {
+  localError.value = ''
+  if (!loginEmail.value || !loginPassword.value) {
+    localError.value = 'Введите логин и пароль'
+    return
+  }
   emit('login', { email: loginEmail.value, password: loginPassword.value })
 }
+
 
 async function handleRegister() {
   localError.value = ''
   registrationSuccess.value = false
 
+  // Проверки
+  if (registrationTab.value === 'org' && !regName.value) {
+    localError.value = 'Введите наименование организации'
+    return
+  }
+  if (!regMinistry.value) {
+    localError.value = 'Выберите ведомство'
+    return
+  }
+  if (!regContactName.value || !regEmail.value || !regPassword.value || !regPasswordRepeat.value) {
+    localError.value = 'Заполните все поля'
+    return
+  }
   if (regPassword.value !== regPasswordRepeat.value) {
     localError.value = 'Пароли не совпадают'
     return
@@ -77,37 +94,29 @@ async function handleRegister() {
     localError.value = 'Пароль должен быть не менее 6 символов и содержать буквы и цифры'
     return
   }
-  if (!regMinistry.value) {
-    localError.value = 'Выберите ведомство'
-    return
+
+  // Формируем тело запроса правильно:
+  const body = {
+    ministry: regMinistry.value,
+    contactName: regContactName.value,
+    contactPhone: regContactPhone.value,
+    email: regEmail.value,
+    password: regPassword.value,
+    isMinistryAdmin: registrationTab.value === 'ministry'
+  }
+  if (registrationTab.value === 'org') {
+    body.orgName = regName.value
   }
 
-  // Отправляем запрос на сервер
   try {
     const response = await fetch('http://136.169.171.150:8888/api/register-request', {
-
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orgName: regName.value,
-        ministry: regMinistry.value,
-        contactName: regContactName.value,
-        contactPhone: regContactPhone.value,
-        email: regEmail.value,
-        password: regPassword.value
-      })
+      body: JSON.stringify(body)
     })
-
     if (response.ok) {
       registrationSuccess.value = true
-      // Сброс формы
-      regEmail.value = ''
-      regPassword.value = ''
-      regPasswordRepeat.value = ''
-      regName.value = ''
-      regMinistry.value = ''
-      regContactName.value = ''
-      regContactPhone.value = ''
+      // сброс формы (если нужно)
     } else {
       const err = await response.json()
       localError.value = err?.error || 'Ошибка при отправке заявки'
@@ -116,6 +125,12 @@ async function handleRegister() {
     localError.value = 'Ошибка соединения с сервером'
   }
 }
+
+
+
+
+
+
 </script>
 
 <template>
@@ -131,46 +146,75 @@ async function handleRegister() {
           <input type="email" v-model="loginEmail" placeholder="E-mail" autocomplete="username" required />
           <input type="password" v-model="loginPassword" placeholder="Пароль" autocomplete="current-password" required />
           <button type="submit" class="modal-btn" :disabled="loading">Войти</button>
+          <div v-if="localError" class="modal-error">{{ localError }}</div>
+          <div v-else-if="error" class="modal-error">{{ error }}</div>
         </form>
         <!-- Регистрация -->
-        <form v-else @submit.prevent="handleRegister" autocomplete="on" v-if="!registrationSuccess">
-          <input type="text" v-model="regName" placeholder="Наименование организации" required />
-
-          <select v-model="regMinistry" required>
-            <option value="" disabled>Выберите ведомство</option>
-            <option v-for="m in ministries" :key="m" :value="m">{{ m }}</option>
-          </select>
-
-          <input type="text" v-model="regContactName" placeholder="ФИО контактного лица" required />
-
-          <input
-            type="tel"
-            v-model="regContactPhone"
-            @input="onPhoneInput"
-            maxlength="18"
-            placeholder="+7 (___) ___-__-__"
-            required
-            autocomplete="tel"
-          />
-
-          <input type="email" v-model="regEmail" placeholder="E-mail" required autocomplete="username" />
-          <input type="password" v-model="regPassword" placeholder="Пароль" required autocomplete="new-password" />
-          <input type="password" v-model="regPasswordRepeat" placeholder="Повторите пароль" required autocomplete="new-password" />
-          <button type="submit" class="modal-btn" :disabled="loading">Зарегистрироваться</button>
-        </form>
-        <div v-if="registrationSuccess" class="modal-success">
-          Заявка принята и будет рассмотрена модератором.<br>
-          Результат будет отправлен на email.
-        </div>
-        <div v-if="localError" class="modal-error">{{ localError }}</div>
-        <div v-else-if="error" class="modal-error">{{ error }}</div>
+        <template v-else>
+          <div class="register-tabs">
+            <button
+              :class="['reg-tab', {active: registrationTab === 'org'}]"
+              @click="registrationTab = 'org'"
+              type="button"
+            >Организация</button>
+            <button
+              :class="['reg-tab', {active: registrationTab === 'ministry'}]"
+              @click="registrationTab = 'ministry'"
+              type="button"
+            >Администратор ведомства</button>
+          </div>
+          <form @submit.prevent="handleRegister" v-if="!registrationSuccess">
+            <input
+              v-if="registrationTab === 'org'"
+              type="text"
+              v-model="regName"
+              placeholder="Наименование организации"
+              required
+            />
+            <select v-model="regMinistry" required>
+              <option value="" disabled>Выберите ведомство</option>
+              <option v-for="m in ministries" :key="m" :value="m">{{ m }}</option>
+            </select>
+            <input type="text" v-model="regContactName" placeholder="ФИО контактного лица" required />
+            <input type="tel" v-model="regContactPhone" @input="onPhoneInput" maxlength="18"
+                   placeholder="+7 (___) ___-__-__" required autocomplete="tel" />
+            <input type="email" v-model="regEmail" placeholder="E-mail" required />
+            <input type="password" v-model="regPassword" placeholder="Пароль" required />
+            <input type="password" v-model="regPasswordRepeat" placeholder="Повторите пароль" required />
+            <button type="submit" class="modal-btn" :disabled="loading">Зарегистрироваться</button>
+            <div v-if="localError" class="modal-error">{{ localError }}</div>
+            <div v-else-if="error" class="modal-error">{{ error }}</div>
+          </form>
+          <div v-if="registrationSuccess" class="modal-success">
+            Заявка принята и будет рассмотрена модератором.<br>
+            Результат будет отправлен на email.
+          </div>
+        </template>
       </div>
       <button class="close-btn" @click="$emit('close')">×</button>
     </div>
   </div>
 </template>
 
+
+
+
+
 <style scoped>
+.register-tabs {
+  display: flex; gap: 10px; margin-bottom: 12px; justify-content: center;
+}
+.reg-tab {
+  background: #e7eef6; border: none; border-radius: 7px;
+  padding: 7px 16px; font-size: 15px; color: #797c8a; font-weight: 500; cursor: pointer;
+}
+.reg-tab.active {
+  background: #f2faff; color: #2962ff;
+}
+.reg-tab[disabled] {
+  pointer-events: none;
+  opacity: 0.45;
+}
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(51,61,81,0.20); z-index: 9999;
   display: flex; align-items: center; justify-content: center;

@@ -1,30 +1,31 @@
 <template>
   <div>
-<LeftPanel
-  v-show="!isPanelCollapsed" 
-  class="map-panel"
-  :visibleLayers="visibleLayers"
-  :ageGroups="ageGroups"
-  :accessibility="accessibility"
-  :allAgeGroups="allAgeGroups"
-  :allOrganizations="allOrganizations"
-  @update:ageGroups="val => ageGroups.splice(0, ageGroups.length, ...val)"
-  @update:accessibility="val => accessibility.splice(0, accessibility.length, ...val)"
-  @selectOrg="handleSelectOrganization"
-  @collapse="isPanelCollapsed = true"
-/>
+    <LeftPanel
+      v-show="!isPanelCollapsed"
+      class="map-panel"
+      :visibleLayers="visibleLayers"
+      :ageGroups="ageGroups"
+      :accessibility="accessibility"
+      :svo="svo"
+      :allAgeGroups="allAgeGroups"
+      :allOrganizations="allOrganizations"
+      @update:ageGroups="val => ageGroups.splice(0, ageGroups.length, ...val)"
+      @update:accessibility="val => accessibility.splice(0, accessibility.length, ...val)"
+      @update:svo="val => svo.splice(0, svo.length, ...val)"
+      @selectOrg="handleSelectOrganization"
+      @collapse="isPanelCollapsed = true"
+    />
 
-<!-- Кнопка для раскрытия панели -->
-<button
-  v-if="isPanelCollapsed"
-  class="panel-toggle-btn"
-  @click="isPanelCollapsed = false"
-  title="Показать панель"
->
-  <svg width="22" height="22" viewBox="0 0 20 20">
-    <path d="M7 5l6 5-6 5" stroke="#666" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>
-</button>
+    <button
+      v-if="isPanelCollapsed"
+      class="panel-toggle-btn"
+      @click="isPanelCollapsed = false"
+      title="Показать панель"
+    >
+      <svg width="22" height="22" viewBox="0 0 20 20">
+        <path d="M7 5l6 5-6 5" stroke="#666" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
 
     <div id="map" ref="mapRef" style="width: 100vw; height: 100vh; position: relative;"></div>
     <transition name="sidebar">
@@ -56,13 +57,13 @@ import LeftPanel from './LeftPanel.vue'
 import SidebarCard from './SidebarCard.vue'
 
 const isPanelCollapsed = ref(false)
-const allAgeGroups = ['0-18', '18+', 'СВО']
+const allAgeGroups = ['0-18', '18+']  // Только две группы
 const allAccessibility = ['Да', 'Нет']
 const ageGroups = reactive([...allAgeGroups])
 const accessibility = reactive([])
+const svo = reactive([]) // Новый фильтр
 
 const visibleLayers = reactive({
-  
   layer1_1: true,
   layer1_2: true,
   layer1_3: true,
@@ -102,15 +103,32 @@ const previewCoords = ref({ x: 0, y: 0 })
 const isPreviewHovered = ref(false)
 const allOrganizations = ref([])
 
+// --- Исправленная фильтрация ---
 function filterFeature(obj) {
   const accVal = (obj.properties.accessibility || '').toLowerCase().trim()
-  const ageVal = (obj.properties.age_group || '').toLowerCase().trim()
-  let ageOk = true, accOk = true
-  const accFilter = Array.isArray(accessibility) ? [...accessibility] : []
+  const ageValRaw = (obj.properties.age_group || '').toLowerCase().trim()
+  const svoVal = (obj.properties.svo || '').toLowerCase().trim()
+  let ageOk = true, accOk = true, svoOk = true
+
+  // Фильтрация возрастных групп только по "0-18" и "18+"
   const ageFilter = Array.isArray(ageGroups) ? [...ageGroups] : []
-  if (ageFilter.length > 0) ageOk = ageFilter.some(group => ageVal.includes(group.toLowerCase().trim()))
+  const ageArr = ageValRaw.split(/[,\n;]/).map(a => a.trim())
+
+  if (ageFilter.length > 0) {
+    ageOk = ageFilter.some(group => ageArr.includes(group.toLowerCase()))
+  }
+
+  // Фильтр доступной среды
+  const accFilter = Array.isArray(accessibility) ? [...accessibility] : []
   if (accFilter.length > 0) accOk = accFilter.some(val => accVal === val.toLowerCase().trim())
-  return ageOk && accOk
+
+  // Фильтр "Участник СВО"
+  const svoFilter = Array.isArray(svo) ? [...svo] : []
+  if (svoFilter.length > 0) {
+    svoOk = svoFilter.includes('Да') ? (svoVal === 'да') : true
+  }
+
+  return ageOk && accOk && svoOk
 }
 
 function applyFiltersToAllLayers() {
@@ -132,7 +150,7 @@ function removeLayer(layerId) {
     mapInstance.geoObjects.remove(objectManagers[layerId])
   }
 }
-watch([ageGroups, accessibility], applyFiltersToAllLayers, { deep: true })
+watch([ageGroups, accessibility, svo], applyFiltersToAllLayers, { deep: true })
 
 function handlePreviewLeave() {
   isPreviewHovered.value = false
@@ -173,9 +191,7 @@ function handleSelectOrganization(org) {
 
 function offsetDuplicateCoords(features) {
   const coordGroups = new Map();
-  const OFFSET = 0.0002; // ~6м
-
-  // Группируем по строковому представлению координат
+  const OFFSET = 0.0002;
   features.forEach(feature => {
     const coordStr = JSON.stringify(feature.geometry.coordinates);
     if (!coordGroups.has(coordStr)) {
@@ -183,13 +199,11 @@ function offsetDuplicateCoords(features) {
     }
     coordGroups.get(coordStr).push(feature);
   });
-
-  // Для каждой группы одинаковых координат смещаем кроме первой
   for (const group of coordGroups.values()) {
     if (group.length > 1) {
       const [lon, lat] = group[0].geometry.coordinates;
       for (let i = 1; i < group.length; i++) {
-        const angle = (i * 30) * Math.PI / 180; // равномерно по кругу
+        const angle = (i * 30) * Math.PI / 180;
         const dx = Math.cos(angle) * OFFSET;
         const dy = Math.sin(angle) * OFFSET;
         group[i].geometry.coordinates = [
@@ -201,7 +215,6 @@ function offsetDuplicateCoords(features) {
   }
   return features;
 }
-
 
 function initMap() {
   window.ymaps.ready(async () => {
@@ -218,12 +231,9 @@ function initMap() {
       fetch(layerFiles[layerId])
         .then(r => r.json())
         .then(data => {
-          // Перед добавлением смещаем дубликаты:
-    if (data && data.features) {
-      data.features = offsetDuplicateCoords(data.features);
-      console.log('После смещения', data.features.map(f => f.geometry.coordinates));
-
-    }
+          if (data && data.features) {
+            data.features = offsetDuplicateCoords(data.features);
+          }
           objectManagers[layerId].add(data)
           objectManagers[layerId].objects.options.set('preset', layerPresets[layerId])
           objectManagers[layerId].objects.options.set('hasBalloon', false)
@@ -274,6 +284,10 @@ onMounted(() => {
   document.head.appendChild(script)
 })
 </script>
+
+
+
+
 
 <style scoped>
 .panel-toggle-btn {
