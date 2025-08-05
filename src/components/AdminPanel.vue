@@ -1,53 +1,85 @@
 <template>
-  <div class="admin-panel">
-    <h2>Админ-панель</h2>
-    <div v-if="!isLoggedIn" class="login-form">
-      <input v-model="login" placeholder="Логин" />
-      <input v-model="password" type="password" placeholder="Пароль" />
-      <button @click="loginAdmin">Войти</button>
-      <div v-if="error" class="error">{{ error }}</div>
-    </div>
-    <div v-else>
-      <button class="logout-btn" @click="logout">Выйти</button>
-      <h3>Заявки на регистрацию</h3>
-      <table v-if="requests.length" class="requests-table">
-        <thead>
-          <tr>
-            <th>Организация</th>
-            <th>Министерство</th>
-            <th>Контактное лицо</th>
-            <th>Телефон</th>
-            <th>Email</th>
-            <th>Пароль (hash)</th>
-            <th>Статус</th>
-            <th>Действия</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="req in requests" :key="req._id">
-            <td><b>{{ req.orgName }}</b></td>
-            <td>{{ req.ministry }}</td>
-            <td>{{ req.contactName }}</td>
-            <td>{{ req.contactPhone }}</td>
-            <td>{{ req.email }}</td>
-            <td style="font-size:11px; color:#555;">{{ req.passwordHash }}</td>
-            <td>
-              <span :style="{ color: statusColor(req.status) }">{{ req.status }}</span>
-            </td>
-            <td>
-              <button v-if="req.status==='pending'" class="approve-btn" @click="approve(req._id)">✅</button>
-              <button v-if="req.status==='pending'" class="reject-btn" @click="reject(req._id)">❌</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <div v-else class="no-requests">Нет заявок</div>
+  <div class="admin-panel-outer">
+    <div class="admin-panel">
+      <!-- Панель действий -->
+      <div class="panel-actions">
+        <button class="close-btn" @click="goHome" title="Закрыть">×</button>
+        <button v-if="isLoggedIn" class="logout-btn" @click="logout" title="Выйти">Выйти</button>
+      </div>
+
+      <h2>Админ-панель</h2>
+      <div v-if="!isLoggedIn" class="login-form">
+        <input v-model="login" placeholder="Логин" />
+        <input v-model="password" type="password" placeholder="Пароль" />
+        <button @click="loginAdmin">Войти</button>
+        <div v-if="error" class="error">{{ error }}</div>
+      </div>
+      <div v-else>
+        <div class="tabs">
+          <button
+            v-for="tab in tabs"
+            :key="tab.value"
+            :class="['tab-btn', {active: activeTab === tab.value}]"
+            @click="activeTab = tab.value"
+          >{{ tab.label }}</button>
+        </div>
+        <div class="filters">
+          <label>Министерство:&nbsp;
+            <select v-model="selectedMinistry">
+              <option value="">Все</option>
+              <option v-for="ministry in ministries" :key="ministry" :value="ministry">
+                {{ ministry }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <table v-if="filteredRequests.length" class="requests-table">
+          <thead>
+            <tr>
+              <th>Организация</th>
+              <th>Министерство</th>
+              <th>Контактное лицо</th>
+              <th>Телефон</th>
+              <th>Email</th>
+              <th>Пароль (hash)</th>
+              <th>Статус</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="req in filteredRequests" :key="req._id">
+              <td><b>{{ req.orgName }}</b></td>
+              <td>{{ req.ministry }}</td>
+              <td>{{ req.contactName }}</td>
+              <td>{{ req.contactPhone }}</td>
+              <td>{{ req.email }}</td>
+              <td style="font-size:11px; color:#555;">{{ req.passwordHash }}</td>
+              <td>
+                <span :style="{ color: statusColor(req.status) }">{{ req.status }}</span>
+              </td>
+              <td>
+                <template v-if="req.status==='pending'">
+                  <button class="approve-btn" @click="approve(req._id)">✅</button>
+                  <button class="reject-btn" @click="reject(req._id)">❌</button>
+                </template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="no-requests">Нет заявок</div>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
-const API_URL = import.meta.env.VITE_API_URL || "http://136.169.171.150:8888";
+const MINISTRIES = [
+  'Министерство просвещения Р.Б.',
+  'Министерство спорта Р.Б.',
+  'Министерство культуры Р.Б.',
+  'Министерство здравоохранения Р.Б.',
+  'Министерство семьи, труда и социальной защиты населения Р.Б.'
+];
 
 export default {
   data() {
@@ -58,11 +90,29 @@ export default {
       error: "",
       requests: [],
       token: "",
+      tabs: [
+        { label: "Заявки", value: "pending" },
+        { label: "Подтвержденные", value: "approved" },
+        { label: "Отклонённые", value: "rejected" }
+      ],
+      activeTab: "pending",
+      ministries: MINISTRIES,
+      selectedMinistry: ""
     };
+  },
+  computed: {
+    filteredRequests() {
+      // Фильтруем по статусу и министерству
+      return this.requests.filter(req =>
+        req.status === this.activeTab &&
+        (this.selectedMinistry === "" || req.ministry === this.selectedMinistry)
+      );
+    }
   },
   methods: {
     async loginAdmin() {
       this.error = "";
+      const API_URL = import.meta.env.VITE_API_URL || "http://136.169.171.150:8888";
       try {
         const res = await fetch(`${API_URL}/api/admin/login`, {
           method: "POST",
@@ -82,6 +132,7 @@ export default {
       }
     },
     async fetchRequests() {
+      const API_URL = import.meta.env.VITE_API_URL || "http://136.169.171.150:8888";
       try {
         const res = await fetch(`${API_URL}/api/admin/registration-requests`, {
           headers: { Authorization: `Bearer ${this.token}` },
@@ -93,6 +144,7 @@ export default {
       }
     },
     async approve(id) {
+      const API_URL = import.meta.env.VITE_API_URL || "http://136.169.171.150:8888";
       try {
         await fetch(`${API_URL}/api/admin/registration-request/${id}/approve`, {
           method: "PATCH",
@@ -104,6 +156,7 @@ export default {
       }
     },
     async reject(id) {
+      const API_URL = import.meta.env.VITE_API_URL || "http://136.169.171.150:8888";
       try {
         await fetch(`${API_URL}/api/admin/registration-request/${id}/reject`, {
           method: "PATCH",
@@ -125,46 +178,121 @@ export default {
       this.isLoggedIn = false;
       this.token = "";
       this.requests = [];
+      this.login = "";
+      this.password = "";
+      this.selectedMinistry = "";
     },
+    goHome() {
+      this.$router.push("/");
+    }
   },
 };
 </script>
 
 <style scoped>
-.profile-form-outer {
+.admin-panel-outer {
+  height: 100vh;
+  min-height: 100vh;
   overflow-y: auto;
-  height: 100vh; /* важно для появления полосы прокрутки */
+  background: #fafbfc;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
 }
 .admin-panel {
   max-width: 1100px;
-  margin: 32px auto 0 auto;
+  margin: 32px 0 0 0;
   padding: 18px 20px 40px 20px;
-  background: #fafbfc;
-  border-radius: 12px;
+  background: #fff;
+  border-radius: 16px;
   box-shadow: 0 4px 16px #0001;
   font-family: "Segoe UI", "Arial", sans-serif;
+  min-height: 80vh;
+  position: relative;
+  width: 100%;
 }
-h2 {
-  margin-bottom: 16px;
+.panel-actions {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  display: flex;
+  gap: 12px;
+  z-index: 10;
 }
 .logout-btn {
   background: #eee;
   border: none;
-  padding: 6px 14px;
-  border-radius: 5px;
+  padding: 7px 18px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 15px;
+  transition: background 0.16s, color 0.16s;
+}
+.logout-btn:hover {
+  background: #ffeaea;
+  color: #e41;
+}
+.close-btn {
+  font-size: 23px;
+  padding: 0 14px;
+  background: #eaf2ff;
+  border: none;
+  border-radius: 7px;
+  color: #444;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.15s, color 0.15s;
+}
+.close-btn:hover {
+  background: #f6dada;
+  color: #e41;
+}
+h2 {
+  margin-bottom: 18px;
+}
+.tabs {
+  display: flex;
+  gap: 7px;
   margin-bottom: 15px;
+  margin-top: 7px;
+}
+.tab-btn {
+  background: #f5f8fa;
+  border: 1px solid #e0e8ee;
+  border-radius: 7px 7px 0 0;
+  padding: 7px 26px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #888;
+  cursor: pointer;
+  transition: background 0.13s, color 0.13s;
+}
+.tab-btn.active {
+  background: #fff;
+  color: #2987f5;
+  border-bottom: 2px solid #fff;
+  font-weight: bold;
+}
+.filters {
+  margin-bottom: 13px;
+  margin-top: 3px;
+}
+.filters select {
+  border-radius: 6px;
+  border: 1px solid #c3d4e2;
+  padding: 6px 12px;
+  font-size: 15px;
+  background: #f9fbff;
 }
 .login-form input {
   margin: 0 8px 8px 0;
-  padding: 6px;
-  border-radius: 4px;
+  padding: 7px;
+  border-radius: 5px;
   border: 1px solid #bbb;
 }
 .login-form button {
-  padding: 6px 14px;
-  border-radius: 4px;
+  padding: 7px 17px;
+  border-radius: 5px;
   border: none;
   background: #359;
   color: #fff;
@@ -179,7 +307,7 @@ h2 {
   border-collapse: collapse;
   margin-top: 18px;
   background: #fff;
-  border-radius: 6px;
+  border-radius: 7px;
   overflow: hidden;
   box-shadow: 0 2px 6px #0002;
 }
@@ -205,7 +333,7 @@ h2 {
 .reject-btn { background: #ffd5d5; }
 .no-requests {
   text-align: center;
-  margin-top: 24px;
+  margin-top: 28px;
   color: #666;
   font-size: 18px;
 }
