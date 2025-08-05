@@ -56,6 +56,9 @@ import { ref, reactive, onMounted, watch, computed, nextTick } from 'vue'
 import LeftPanel from './LeftPanel.vue'
 import SidebarCard from './SidebarCard.vue'
 
+// Единое наименование для ведомства соцзащиты:
+const MINISTRY_SOCIAL = "Министерство семьи, труда и социальной защиты населения Р.Б."
+
 const isPanelCollapsed = ref(false)
 const allAgeGroups = ['0-18', '18+']  // Только две группы
 const allAccessibility = ['Да', 'Нет']
@@ -258,11 +261,16 @@ function initMap() {
           })
           if (data && data.features) {
             allOrganizations.value.push(
-              ...data.features.map(f => ({
-                ...f.properties,
-                coords: f.geometry.coordinates,
-                layer: layerId
-              }))
+              ...data.features.map(f => {
+                // ВАЖНО: всегда приводить ведомство к одному значению!
+                return {
+                  ...f.properties,
+                  vedomstva: f.properties.vedomstva === 'Министерство семьи, труда и социальной защиты населения Р.Б.' ||
+                             f.properties.vedomstva === 'Министерство труда и социальной защиты Р.Б.' ? MINISTRY_SOCIAL : (f.properties.vedomstva || ''),
+                  coords: f.geometry.coordinates,
+                  layer: layerId
+                }
+              })
             )
           }
           if (visibleLayers[layerId]) addLayerWithFilter(layerId)
@@ -284,10 +292,6 @@ onMounted(() => {
   document.head.appendChild(script)
 })
 </script>
-
-
-
-
 
 <style scoped>
 .panel-toggle-btn {
@@ -320,7 +324,6 @@ onMounted(() => {
   font-family: 'Segoe UI', sans-serif;
 }
 
-/* Заголовок и сброс */
 .LeftPanel h3 {
   font-size: 16px;
   margin-bottom: 12px;
@@ -328,7 +331,6 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
 }
-
 .LeftPanel .reset-button {
   font-size: 13px;
   color: #888;
@@ -337,16 +339,12 @@ onMounted(() => {
 .LeftPanel .reset-button:hover {
   text-decoration: underline;
 }
-
-/* Чекбоксы и группы */
 .LeftPanel label {
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 4px 0;
 }
-
-/* Кнопка Применить */
 .apply-button {
   background-color: #04b;
   color: white;
@@ -361,8 +359,6 @@ onMounted(() => {
   background-color: #ccc;
   cursor: not-allowed;
 }
-
-/* Сайдбар */
 .sidebar-card {
   background: white;
   border-radius: 12px;
@@ -376,8 +372,6 @@ onMounted(() => {
   right: 20px;
   z-index: 1500;
 }
-
-/* Всплывающая карточка при наведении */
 .preview-card {
   background: white;
   border-radius: 8px;
