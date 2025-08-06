@@ -28,6 +28,14 @@
     </button>
 
     <div id="map" ref="mapRef" style="width: 100vw; height: 100vh; position: relative;"></div>
+
+    <!-- Ошибка загрузки -->
+    <div v-if="loadError" class="map-error">
+      <div>{{ loadError }}</div>
+      <button class="retry-btn" @click="loadOrganizationsFromApi">Повторить</button>
+    </div>
+    <div v-if="isLoading" class="map-loader">Загрузка организаций...</div>
+
     <transition name="sidebar">
       <SidebarCard v-if="selectedOrg" :org="selectedOrg" @close="selectedOrg = null" />
     </transition>
@@ -51,45 +59,34 @@
   </div>
 </template>
 
+
 <script setup>
 import { ref, reactive, onMounted, watch, computed, nextTick } from 'vue'
 import LeftPanel from './LeftPanel.vue'
 import SidebarCard from './SidebarCard.vue'
 
-// Единое наименование для ведомства соцзащиты:
 const MINISTRY_SOCIAL = "Министерство семьи, труда и социальной защиты населения Р.Б."
 
 const isPanelCollapsed = ref(false)
-const allAgeGroups = ['0-18', '18+']  // Только две группы
-const allAccessibility = ['Да', 'Нет']
+const allAgeGroups = ['0-18', '18+']
 const ageGroups = reactive([...allAgeGroups])
 const accessibility = reactive([])
-const svo = reactive([]) // Новый фильтр
+const svo = reactive([])
 
 const visibleLayers = reactive({
-  layer1_1: true,
-  layer1_2: true,
-  layer1_3: true,
+  layer1_1: true, // Муниципальные ОО
+  layer1_2: true, // Коррекционные ОО
+  layer1_3: true, // ПМПК
   layer2: true,
   layer3: true,
   layer4: true,
   layer5: true
 })
 
-const layerFiles = {
-  layer1_1: '/objects1-1.json',
-  layer1_2: '/objects1-2.json',
-  layer1_3: '/objects1-3.json',
-  layer2: '/objects2.json',
-  layer3: '/objects3.json',
-  layer4: '/objects4.json',
-  layer5: '/objects5.json'
-}
-
 const layerPresets = {
-  layer1_1: 'islands#redIcon',        // Муниципальные ОО
-  layer1_2: 'islands#orangeIcon',     // Коррекционные ОО
-  layer1_3: 'islands#brownIcon',      // ПМПК
+  layer1_1: 'islands#redIcon',
+  layer1_2: 'islands#orangeIcon',
+  layer1_3: 'islands#brownIcon',
   layer2: 'islands#blueIcon',
   layer3: 'islands#greenIcon',
   layer4: 'islands#violetIcon',
@@ -106,34 +103,172 @@ const previewCoords = ref({ x: 0, y: 0 })
 const isPreviewHovered = ref(false)
 const allOrganizations = ref([])
 
-// --- Исправленная фильтрация ---
+const isLoading = ref(false)
+const loadError = ref(null)
+
+function debugLog(...args) {
+  if (import.meta.env.DEV) {
+    console.log(...args)
+  }
+}
+
+
+function getLayerIdByOrg(org) {
+  const dep = (org.department || org.vedomstva || '').trim();
+  if (dep === 'Министерство просвещения Р.Б.') {
+    let podvList = [];
+    if (Array.isArray(org.podvedomstva)) podvList = podvList.concat(org.podvedomstva);
+    else if (typeof org.podvedomstva === 'string') podvList.push(org.podvedomstva);
+    if (Array.isArray(org.profile)) podvList = podvList.concat(org.profile);
+    else if (typeof org.profile === 'string') podvList.push(org.profile);
+    podvList = podvList.map(x => (x || '').toLowerCase());
+
+    if (podvList.some(v => v.includes('коррекц'))) return 'layer1_2';
+    if (podvList.some(v => v.includes('пмпк'))) return 'layer1_3';
+    if (podvList.some(v => v.includes('муницип'))) return 'layer1_1';
+
+    // Если не найдено ни одного ключа — не показываем
+    return null;
+  }
+  if (dep === 'Министерство спорта Р.Б.') return 'layer2';
+  if (dep === 'Министерство культуры Р.Б.') return 'layer3';
+  if (dep === 'Министерство здравоохранения Р.Б.') return 'layer4';
+  if (dep === MINISTRY_SOCIAL) return 'layer5';
+  return null;
+}
+
+
+
+
+async function loadOrganizationsFromApi() {
+  isLoading.value = true
+  loadError.value = null
+  try {
+    const res = await fetch('http://136.169.171.150:8888/api/organizations')
+    if (!res.ok) throw new Error('Ошибка сервера: ' + res.status)
+
+    const data = await res.json()
+    allOrganizations.value = []
+    for (const key in objectManagers) {
+      if (mapInstance) mapInstance.geoObjects.remove(objectManagers[key])
+      delete objectManagers[key]
+    }
+    const layersData = {
+      layer1_1: [], layer1_2: [], layer1_3: [],
+      layer2: [], layer3: [], layer4: [], layer5: []
+    }
+    data.forEach(org => {
+      debugLog('[ORGANIZATION]', org)
+      const layer = getLayerIdByOrg(org)
+      if (!layer) return
+      layersData[layer].push({
+        ...org,
+        layer,
+        coords: org.coords
+      })
+      allOrganizations.value.push({
+        ...org,
+        layer,
+        coords: org.coords
+      })
+    })
+    for (const layerId in layersData) {
+      if (!objectManagers[layerId]) {
+        objectManagers[layerId] = new window.ymaps.ObjectManager({ clusterize: true })
+      }
+      const features = layersData[layerId]
+        .filter(org => Array.isArray(org.coords) && org.coords.length === 2)
+        .map((org, idx) => ({
+          type: 'Feature',
+          id: org._id || `${layerId}-${idx}`,
+          geometry: { type: 'Point', coordinates: org.coords },
+          properties: { ...org }
+        }))
+      offsetDuplicateCoords(features)
+      objectManagers[layerId].removeAll && objectManagers[layerId].removeAll()
+      objectManagers[layerId].add({ type: 'FeatureCollection', features })
+      objectManagers[layerId].objects.options.set('preset', layerPresets[layerId])
+      objectManagers[layerId].objects.options.set('hasBalloon', false)
+      objectManagers[layerId].objects.options.set('openBalloonOnClick', false)
+      objectManagers[layerId].objects.options.set('hasHint', false)
+      objectManagers[layerId].objects.events.add('mouseenter', (e) => {
+        const objectId = e.get('objectId')
+        const geoObject = objectManagers[layerId].objects.getById(objectId)
+        const props = geoObject.properties
+        const coords = geoObject.geometry.coordinates
+        const pixel = mapInstance.options.get('projection').toGlobalPixels(coords, mapInstance.getZoom())
+        const mapPx = mapInstance.converter.globalToPage(pixel)
+        openPreviewCard(props, { x: mapPx[0], y: mapPx[1] })
+      })
+      objectManagers[layerId].objects.events.add('mouseleave', () => {
+        setTimeout(() => { if (!isPreviewHovered.value) hoveredOrg.value = null }, 150)
+      })
+      objectManagers[layerId].objects.events.add('click', (e) => {
+        const objectId = e.get('objectId')
+        const props = objectManagers[layerId].objects.getById(objectId).properties
+        selectedOrg.value = { ...props }
+      })
+      if (visibleLayers[layerId]) mapInstance.geoObjects.add(objectManagers[layerId])
+      objectManagers[layerId].setFilter(obj => filterFeature(obj))
+    }
+    applyFiltersToAllLayers()
+    loadError.value = null
+  } catch (e) {
+    debugLog('[loadOrganizationsFromApi ERROR]:', e)
+    loadError.value = 'Ошибка загрузки организаций с сервера!'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+function offsetDuplicateCoords(features) {
+  const coordGroups = new Map()
+  const OFFSET = 0.0002
+  features.forEach(feature => {
+    const coordStr = JSON.stringify(feature.geometry.coordinates)
+    if (!coordGroups.has(coordStr)) coordGroups.set(coordStr, [])
+    coordGroups.get(coordStr).push(feature)
+  })
+  for (const group of coordGroups.values()) {
+    if (group.length > 1) {
+      const [lon, lat] = group[0].geometry.coordinates
+      for (let i = 1; i < group.length; i++) {
+        const angle = (i * 30) * Math.PI / 180
+        const dx = Math.cos(angle) * OFFSET
+        const dy = Math.sin(angle) * OFFSET
+        group[i].geometry.coordinates = [
+          lon + dx,
+          lat + dy
+        ]
+      }
+    }
+  }
+}
+
 function filterFeature(obj) {
+  let ageArr = []
+  if (Array.isArray(obj.properties.ageGroups)) {
+    ageArr = obj.properties.ageGroups.map(a => a?.toString().toLowerCase().trim())
+  } else if (typeof obj.properties.ageGroups === 'string') {
+    ageArr = obj.properties.ageGroups.split(/[,\n;]/).map(a => a.trim().toLowerCase())
+  } else if (typeof obj.properties.age_group === 'string') {
+    ageArr = obj.properties.age_group.split(/[,\n;]/).map(a => a.trim().toLowerCase())
+  }
   const accVal = (obj.properties.accessibility || '').toLowerCase().trim()
-  const ageValRaw = (obj.properties.age_group || '').toLowerCase().trim()
   const svoVal = (obj.properties.svo || '').toLowerCase().trim()
   let ageOk = true, accOk = true, svoOk = true
 
-  // Фильтрация возрастных групп только по "0-18" и "18+"
   const ageFilter = Array.isArray(ageGroups) ? [...ageGroups] : []
-  const ageArr = ageValRaw.split(/[,\n;]/).map(a => a.trim())
+  if (ageFilter.length > 0) ageOk = ageFilter.some(group => ageArr.includes(group.toLowerCase()))
 
-  if (ageFilter.length > 0) {
-    ageOk = ageFilter.some(group => ageArr.includes(group.toLowerCase()))
-  }
-
-  // Фильтр доступной среды
   const accFilter = Array.isArray(accessibility) ? [...accessibility] : []
   if (accFilter.length > 0) accOk = accFilter.some(val => accVal === val.toLowerCase().trim())
 
-  // Фильтр "Участник СВО"
   const svoFilter = Array.isArray(svo) ? [...svo] : []
-  if (svoFilter.length > 0) {
-    svoOk = svoFilter.includes('Да') ? (svoVal === 'да') : true
-  }
+  if (svoFilter.length > 0) svoOk = svoFilter.includes('Да') ? (svoVal === 'да') : true
 
   return ageOk && accOk && svoOk
 }
-
 function applyFiltersToAllLayers() {
   for (const layerId in objectManagers) {
     const manager = objectManagers[layerId]
@@ -154,6 +289,12 @@ function removeLayer(layerId) {
   }
 }
 watch([ageGroups, accessibility, svo], applyFiltersToAllLayers, { deep: true })
+watch(visibleLayers, (newValues) => {
+  for (const id in newValues) {
+    removeLayer(id)
+    if (newValues[id]) addLayerWithFilter(id)
+  }
+}, { deep: true })
 
 function handlePreviewLeave() {
   isPreviewHovered.value = false
@@ -192,33 +333,6 @@ function handleSelectOrganization(org) {
   }
 }
 
-function offsetDuplicateCoords(features) {
-  const coordGroups = new Map();
-  const OFFSET = 0.0002;
-  features.forEach(feature => {
-    const coordStr = JSON.stringify(feature.geometry.coordinates);
-    if (!coordGroups.has(coordStr)) {
-      coordGroups.set(coordStr, []);
-    }
-    coordGroups.get(coordStr).push(feature);
-  });
-  for (const group of coordGroups.values()) {
-    if (group.length > 1) {
-      const [lon, lat] = group[0].geometry.coordinates;
-      for (let i = 1; i < group.length; i++) {
-        const angle = (i * 30) * Math.PI / 180;
-        const dx = Math.cos(angle) * OFFSET;
-        const dy = Math.sin(angle) * OFFSET;
-        group[i].geometry.coordinates = [
-          lon + dx,
-          lat + dy
-        ];
-      }
-    }
-  }
-  return features;
-}
-
 function initMap() {
   window.ymaps.ready(async () => {
     await nextTick()
@@ -228,63 +342,10 @@ function initMap() {
       zoom: 7,
       controls: ['zoomControl']
     })
-    allOrganizations.value = []
-    for (const layerId in layerFiles) {
-      objectManagers[layerId] = new window.ymaps.ObjectManager({ clusterize: true })
-      fetch(layerFiles[layerId])
-        .then(r => r.json())
-        .then(data => {
-          if (data && data.features) {
-            data.features = offsetDuplicateCoords(data.features);
-          }
-          objectManagers[layerId].add(data)
-          objectManagers[layerId].objects.options.set('preset', layerPresets[layerId])
-          objectManagers[layerId].objects.options.set('hasBalloon', false)
-          objectManagers[layerId].objects.options.set('openBalloonOnClick', false)
-          objectManagers[layerId].objects.options.set('hasHint', false)
-          objectManagers[layerId].objects.events.add('mouseenter', (e) => {
-            const objectId = e.get('objectId')
-            const geoObject = objectManagers[layerId].objects.getById(objectId)
-            const props = geoObject.properties
-            const coords = geoObject.geometry.coordinates
-            const pixel = mapInstance.options.get('projection').toGlobalPixels(coords, mapInstance.getZoom())
-            const mapPx = mapInstance.converter.globalToPage(pixel)
-            openPreviewCard(props, { x: mapPx[0], y: mapPx[1] })
-          })
-          objectManagers[layerId].objects.events.add('mouseleave', () => {
-            setTimeout(() => { if (!isPreviewHovered.value) hoveredOrg.value = null }, 150)
-          })
-          objectManagers[layerId].objects.events.add('click', (e) => {
-            const objectId = e.get('objectId')
-            const props = objectManagers[layerId].objects.getById(objectId).properties
-            selectedOrg.value = { ...props }
-          })
-          if (data && data.features) {
-            allOrganizations.value.push(
-              ...data.features.map(f => {
-                // ВАЖНО: всегда приводить ведомство к одному значению!
-                return {
-                  ...f.properties,
-                  vedomstva: f.properties.vedomstva === 'Министерство семьи, труда и социальной защиты населения Р.Б.' ||
-                             f.properties.vedomstva === 'Министерство труда и социальной защиты Р.Б.' ? MINISTRY_SOCIAL : (f.properties.vedomstva || ''),
-                  coords: f.geometry.coordinates,
-                  layer: layerId
-                }
-              })
-            )
-          }
-          if (visibleLayers[layerId]) addLayerWithFilter(layerId)
-          applyFiltersToAllLayers()
-        })
-    }
-    watch(visibleLayers, (newValues) => {
-      for (const id in newValues) {
-        removeLayer(id)
-        if (newValues[id]) addLayerWithFilter(id)
-      }
-    }, { deep: true })
+    await loadOrganizationsFromApi()
   })
 }
+
 onMounted(() => {
   const script = document.createElement('script')
   script.src = 'https://api-maps.yandex.ru/2.1/?apikey=9dda63a0-a400-4fa1-bed5-024c6ad2056d&lang=ru_RU'
@@ -292,6 +353,10 @@ onMounted(() => {
   document.head.appendChild(script)
 })
 </script>
+
+
+
+
 
 <style scoped>
 .panel-toggle-btn {
@@ -323,7 +388,6 @@ onMounted(() => {
   z-index: 1000;
   font-family: 'Segoe UI', sans-serif;
 }
-
 .LeftPanel h3 {
   font-size: 16px;
   margin-bottom: 12px;
@@ -380,4 +444,33 @@ onMounted(() => {
   font-size: 13px;
   pointer-events: auto;
 }
+.map-loader, .map-error {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3000;
+  background: white;
+  border: 1.5px solid #eee;
+  border-radius: 12px;
+  padding: 26px 35px;
+  font-size: 19px;
+  color: #222;
+  text-align: center;
+  box-shadow: 0 2px 24px #0001;
+}
+.map-error {
+  color: #d70000;
+}
+.retry-btn {
+  background: #36c900;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 22px;
+  font-size: 15px;
+  cursor: pointer;
+  margin-top: 14px;
+}
+.retry-btn:hover { background: #259a00; }
 </style>

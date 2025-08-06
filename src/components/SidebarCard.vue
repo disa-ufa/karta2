@@ -10,15 +10,16 @@
         <span v-if="org.rating" class="sidebar-rating-value">{{ org.rating }}</span>
         <span v-if="org.ratingCount" class="sidebar-rating-count">({{ org.ratingCount }} оценок)</span>
       </div>
-      <div class="sidebar-status" :class="{ closed: org.status && org.status.includes('Закрыто') }">
-        {{ org.status }}
-      </div>
-      <div class="sidebar-section"><b>Адрес:</b> {{ org.address }}</div>
-      <div class="sidebar-section"><b>Телефон:</b> {{ org.phone }}</div>
-      <div class="sidebar-section"><b>Сайт:</b> <a :href="org.website" target="_blank">{{ org.website }}</a></div>
-      <div class="sidebar-section"><b>Форма:</b> {{ org.rehab_form }}</div>
-      <div class="sidebar-section"><b>Возрастная группа:</b> {{ org.age_group }}</div>
-      <div class="sidebar-section"><b>Доступная среда:</b> {{ org.accessibility }}</div>
+  
+<div class="sidebar-section" v-if="org.address"><b>Адрес:</b> {{ org.address }}</div>
+<div class="sidebar-section" v-if="org.phone"><b>Телефон:</b> {{ org.phone }}</div>
+<div class="sidebar-section" v-if="org.website">
+  <b>Сайт:</b> <a :href="org.website" target="_blank">{{ org.website }}</a>
+</div>
+<div class="sidebar-section" v-if="org.rehab_form"><b>Форма:</b> {{ org.rehab_form }}</div>
+<div class="sidebar-section" v-if="org.age_group"><b>Возрастная группа:</b> {{ org.age_group }}</div>
+<div class="sidebar-section" v-if="org.accessibility"><b>Доступная среда:</b> {{ org.accessibility }}</div>
+
       
       <!-- ПРОФИЛЬ КАК СПИСОК -->
       <div class="sidebar-section">

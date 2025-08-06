@@ -18,7 +18,6 @@ const LAYER_GROUPS = [
   { key: 'layer4', label: 'Министерство здравоохранения Р.Б.' },
   { key: 'layer5', label: 'Министерство семьи, труда и социальной защиты населения Р.Б.' }
 ]
-
 const MINISTRIES = [
   'Министерство просвещения Р.Б.',
   'Министерство спорта Р.Б.',
@@ -26,8 +25,6 @@ const MINISTRIES = [
   'Министерство здравоохранения Р.Б.',
   'Министерство семьи, труда и социальной защиты населения Р.Б.'
 ]
-
-// Только 0-18 и 18+
 const ageGroupsOptions = ['0-18', '18+']
 
 const props = defineProps({
@@ -52,7 +49,6 @@ const localAgeGroups = ref([...props.ageGroups])
 const localAccessibilityEnabled = ref(props.accessibility.includes('Да'))
 const svoEnabled = ref(!!(props.svo && props.svo.includes('Да')))
 
-// sync props on change
 watch(() => props.ageGroups, val => {
   localAgeGroups.value = [...val]
 })
@@ -69,14 +65,11 @@ function toggleLocalAgeGroup(val) {
     if (arr.length > 1) {
       arr.splice(arr.indexOf(val), 1)
     }
-    // если 1, не снимаем галку!
   } else {
     arr.push(val)
   }
   localAgeGroups.value = arr
 }
-
-
 function toggleAccessibility() {
   localAccessibilityEnabled.value = !localAccessibilityEnabled.value
 }
@@ -97,7 +90,6 @@ function resetFilters() {
   svoEnabled.value = false
   applyFilters()
 }
-
 const hasChanges = computed(() => {
   const originalAge = [...props.ageGroups].sort().join(',')
   const localAge = [...localAgeGroups.value].sort().join(',')
@@ -221,7 +213,6 @@ function selectOrgFromDropdown(org) {
   showDropdown.value = false
   searchInput.value = org.name
 }
-
 const LAYER1_KEYS = ['layer1_1', 'layer1_2', 'layer1_3']
 const allLayer1Checked = computed(() =>
   LAYER1_KEYS.every(key => props.visibleLayers[key])
