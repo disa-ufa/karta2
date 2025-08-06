@@ -8,7 +8,47 @@ import ErrorBar from './AdminProfile/ErrorBar.vue'
 import LoadingBar from './AdminProfile/LoadingBar.vue'
 import EducationMinistryTabs from './EducationMinistryTabs.vue'
 
-const AGE_OPTIONS = ['0-18', '18+', 'СВО']
+const AGE_OPTIONS = ['0-18', '18+']
+
+// Универсальный справочник профилей
+const PROFILE_OPTIONS = [
+  'Лица с интеллектуальными нарушениями',
+  'Лица с нарушениями зрения',
+  'Лица с нарушениями слуха',
+  'Лица с нарушениями опорно-двигательного аппарата',
+]
+
+// Пример для двух ведомств (расширяй по необходимости)
+const SERVICE_OPTIONS = {
+  "Министерство культуры Р.Б.": [
+    "Арт-терапия", "Музыкотерапия", "Декоративно-прикладное искусство", "Обучение драматическому искусству",
+    "Танцевально-двигательная терапия", "Библиотерапия", "Музыко-терапия", "Кинотерапия",
+    "Занятия лепкой", "Игровая терапия", "Занятие лепкой"
+  ],
+  "Министерство спорта Р.Б.": [
+    "Организация мероприятий по подготовке спортивных сборных команд",
+    "Организация и проведение официальных спортивных мероприятий",
+    "Обеспечение участия спортивных сборных команд в официальных спортивных мероприятиях",
+    "Спортивная подготовка по спорту лиц с интеллектуальными нарушениями",
+    "Спортивная подготовка по спорту слепых",
+    "Спортивная подготовка по спорту глухих",
+    "Спортивная подготовка по спорту лиц с поражением опорно-двигательного аппарата"
+  ],
+}
+const SPECIALIST_OPTIONS = {
+  "Министерство культуры Р.Б.": [
+    "Руководители творческих коллективов", "Руководитель кружка", "Библиотекарь", "Психолог",
+    "Тифлопедагог", "Мастера декоративно-прикладного искусства",
+    "Руководитель студии народных ремесел \"Возрождение наследия\"",
+    "Заведующий методическим кабинетом МАУ \"Бураевский РДК им. Р. Галиевой\"",
+    "Культорганизатор", "Художественный руководитель", "Приглашенные психологи"
+  ],
+  "Министерство спорта Р.Б.": [
+    "Тренер-преподаватель",
+    "Инструктор-методист",
+    "Педагог-психолог"
+  ]
+}
 
 const admin = ref({
   ministry: localStorage.getItem('user_ministry') || "Министерство культуры Р.Б."
@@ -19,55 +59,25 @@ const error = ref('')
 const loading = ref(false)
 const search = ref('')
 const columnWidths = ref([
-  48, 250, 250, 210, 105, 100, 150, 110, 260, 280, 380, 108,
+  48, 250, 250, 210, 105, 100, 115, 95, 160, 220, 210, 100,
 ])
 const originalOrgs = ref([])
 
-const MINISTRY_DICTIONARIES = {
-  "Министерство культуры Р.Б.": {
-    profile: [
-      'Лица с интеллектуальными нарушениями',
-      'Лица с нарушениями зрения',
-      'Лица с нарушениями слуха',
-      'Лица с нарушениями опорно-двигательного аппарата',
-    ],
-    services: [
-      "Арт-терапия", "Музыкотерапия", "Декоративно-прикладное искусство", "Обучение драматическому искусству",
-      "Танцевально-двигательная терапия", "Библиотерапия", "Музыко-терапия", "Кинотерапия",
-      "Занятия лепкой", "Игровая терапия", "Занятие лепкой"
-    ],
-    specialists: [
-      "Руководители творческих коллективов", "Руководитель кружка", "Библиотекарь", "Психолог",
-      "Тифлопедагог", "Мастера декоративно-прикладного искусства",
-      "Руководитель студии народных ремесел \"Возрождение наследия\"",
-      "Заведующий методическим кабинетом МАУ \"Бураевский РДК им. Р. Галиевой\"",
-      "Культорганизатор", "Художественный руководитель", "Приглашенные психологи"
-    ]
-  },
-  "Министерство спорта Р.Б.": {
-    profile: [
-      "Лица с нарушениями слуха",
-      "Лица с поражением ОДА",
-      "Лица с нарушениями зрения",
-      "Лица с ИН"
-    ],
-    services: [
-      "Организация мероприятий по подготовке спортивных сборных команд",
-      "Организация и проведение официальных спортивных мероприятий",
-      "Обеспечение участия спортивных сборных команд в официальных спортивных мероприятиях",
-      "Спортивная подготовка по спорту лиц с интеллектуальными нарушениями",
-      "Спортивная подготовка по спорту слепых",
-      "Спортивная подготовка по спорту глухих",
-      "Спортивная подготовка по спорту лиц с поражением опорно-двигательного аппарата"
-    ],
-    specialists: [
-      "Тренер-преподаватель",
-      "Инструктор-методист",
-      "Педагог-психолог"
-    ]
-  }
+const router = useRouter()
+function goHome() {
+  router.push('/')
 }
 
+// Сравнение массивов без учета порядка
+function arraysEqual(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  const as = [...a].sort();
+  const bs = [...b].sort();
+  return as.every((val, idx) => val === bs[idx]);
+}
+
+// Приведение к массиву
 function getProfileArray(profile) {
   if (Array.isArray(profile)) return profile
   if (typeof profile === 'string') {
@@ -81,44 +91,19 @@ function getStringArray(val) {
   return []
 }
 
-const ministryDict = computed(() => MINISTRY_DICTIONARIES[admin.value.ministry] || {
-  profile: [],
-  services: [],
-  specialists: []
-})
-
-const filteredOrgs = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return organizations.value
-  return organizations.value.filter(org => {
-    const fields = [
-      org.id, org.name, org.full_name, org.address, org.phone, org.website,
-      (org.age_group || []).join(','),
-      org.accessibility,
-      getProfileArray(org.profile).join(','),
-      getStringArray(org.services).join(','),
-      getStringArray(org.specialists).join(',')
-    ].map(x => (x || '').toString().toLowerCase())
-    return fields.some(val => val.includes(q))
-  })
-})
-
-const router = useRouter()
-function goHome() {
-  router.push('/')
-}
-
+// Сравнение для кнопки сохранения
 function isOrgChanged(idx, org) {
   const orig = originalOrgs.value[idx]
   if (!orig) return false
   return [
     'name', 'full_name', 'address', 'phone', 'website'
   ].some(field => (org[field] || '') !== (orig[field] || '')) ||
-    JSON.stringify(org.age_group || []) !== JSON.stringify(orig.age_group || []) ||
-    (org.accessibility || '') !== (orig.accessibility || '') ||
-    JSON.stringify(getProfileArray(org.profile)) !== JSON.stringify(getProfileArray(orig.profile)) ||
-    JSON.stringify(getStringArray(org.services)) !== JSON.stringify(getStringArray(orig.services)) ||
-    JSON.stringify(getStringArray(org.specialists)) !== JSON.stringify(getStringArray(orig.specialists))
+    !arraysEqual(org.ageGroups || [], orig.ageGroups || []) ||
+    (org.svo || '') !== (orig.svo || '') ||
+    (org.accessibility || '').toLowerCase() !== (orig.accessibility || '').toLowerCase() ||
+    !arraysEqual(getProfileArray(org.profile), getProfileArray(orig.profile)) ||
+    !arraysEqual(getStringArray(org.services), getStringArray(orig.services)) ||
+    !arraysEqual(getStringArray(org.specialists), getStringArray(orig.specialists))
 }
 function saveOrg(org, idx) {
   alert('Сохранение реализуется через backend. Сейчас только UI.')
@@ -132,41 +117,52 @@ async function loadOrganizationsForMinistry(ministry) {
   loading.value = true
   try {
     let url = ''
-    if (ministry === "Министерство культуры Р.Б.") url = '/objects3.json'
-    else if (ministry === "Министерство спорта Р.Б.") url = '/objects2.json'
+    if (ministry === "Министерство культуры Р.Б.") url = '/api/organizations?department=Министерство%20культуры%20Р.Б.'
+    else if (ministry === "Министерство спорта Р.Б.") url = '/api/organizations?department=Министерство%20спорта%20Р.Б.'
     else return
 
-    console.log('Загрузка данных для министерства:', ministry, url)
     const resp = await fetch(url)
     if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
     const json = await resp.json()
-    if (json && json.features) {
-      organizations.value = json.features.map(f => ({
-        ...f.properties,
-        id: f.id || f.properties?.id || Math.random().toString(36).slice(2),
-      }))
-    } else if (Array.isArray(json)) {
-      organizations.value = json
-    } else {
-      organizations.value = []
-    }
+    organizations.value = json.map((org, i) => ({
+      ...org,
+      id: i + 1, // просто нумерация
+      profile: getProfileArray(org.profile),
+      services: getStringArray(org.services),
+      specialists: getStringArray(org.specialists),
+      ageGroups: org.ageGroups || [],
+      svo: org.svo || (Array.isArray(org.ageGroups) && org.ageGroups.includes("СВО") ? "Да" : "Нет"),
+      accessibility: (org.accessibility || '').toLowerCase(),
+    }))
     originalOrgs.value = organizations.value.map(org => JSON.parse(JSON.stringify(org)))
-    console.log('Организаций загружено:', organizations.value.length)
   } catch (e) {
     error.value = 'Ошибка загрузки организаций: ' + (e.message || e)
     organizations.value = []
-    console.error(error.value, e)
   }
   loading.value = false
 }
 
-// ------------ onMounted ------------
+const filteredOrgs = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return organizations.value
+  return organizations.value.filter(org => {
+    const fields = [
+      org.id, org.name, org.full_name, org.address, org.phone, org.website,
+      (org.ageGroups || []).join(','),
+      org.svo,
+      org.accessibility,
+      getProfileArray(org.profile).join(','),
+      getStringArray(org.services).join(','),
+      getStringArray(org.specialists).join(',')
+    ].map(x => (x || '').toString().toLowerCase())
+    return fields.some(val => val.includes(q))
+  })
+})
 
 onMounted(async () => {
   if (admin.value.ministry !== 'Министерство просвещения Р.Б.') {
     await loadOrganizationsForMinistry(admin.value.ministry)
   } else {
-    // для "просвещения" ничего не грузим тут, табы сами загрузят
     organizations.value = []
   }
 })
@@ -188,7 +184,6 @@ onMounted(async () => {
     <SearchBox v-model="search" :count="filteredOrgs.length" />
     <h3 class="orgs-title">Организации ведомства</h3>
     <div class="table-container-flex">
-      <!-- Вкладки для Минпросвещения, обычная таблица для остальных -->
       <EducationMinistryTabs v-if="admin.ministry === 'Министерство просвещения Р.Б.'" />
       <template v-else>
         <LoadingBar v-if="loading" />
@@ -196,9 +191,9 @@ onMounted(async () => {
           v-else
           :organizations="filteredOrgs"
           :columnWidths="columnWidths"
-          :profileOptions="ministryDict.profile"
-          :serviceOptions="ministryDict.services"
-          :specialistOptions="ministryDict.specialists"
+          :profileOptions="PROFILE_OPTIONS"
+          :serviceOptions="SERVICE_OPTIONS[admin.ministry] || []"
+          :specialistOptions="SPECIALIST_OPTIONS[admin.ministry] || []"
           :ageOptions="AGE_OPTIONS"
           :isOrgChanged="isOrgChanged"
           @saveOrg="saveOrg"
@@ -208,5 +203,6 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
 
 <style src="./AdminProfile/styles.css"></style>

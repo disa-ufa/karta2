@@ -72,39 +72,37 @@ const tabs = [
 
 const activeTab = ref('municipal')
 
-onMounted(async () => {
+/**
+ * Загружает организации по подведомству из API.
+ * @param {string} podvedomstvo - "Муниципальные ОО" | "Коррекционные ОО" | "ПМПК"
+ */
+async function loadOrganizationsForPodvedomstvo(podvedomstvo) {
   try {
-    municipalOrgs.value = await loadJson('/objects1-1.json', 'municipalOrgs')
-    correctionalOrgs.value = await loadJson('/objects1-2.json', 'correctionalOrgs')
-    pmpkOrgs.value = await loadJson('/objects1-3.json', 'pmpkOrgs')
-  } catch (e) {
-    error.value = e.message || String(e)
-    console.error('Global load error:', e)
-  }
-})
-
-async function loadJson(url, label = '') {
-  try {
+    const department = 'Министерство просвещения Р.Б.'
+    const url = `/api/organizations?department=${encodeURIComponent(department)}&podvedomstva=${encodeURIComponent(podvedomstvo)}`
     const resp = await fetch(url)
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
-    }
-    const json = await resp.json()
-    // GeoJSON: {features: [ ... ]}
-    if (Array.isArray(json.features)) {
-      return json.features.map(f => f.properties)
-    }
-    // Просто массив объектов
-    if (Array.isArray(json)) {
-      return json
-    }
-    // Неизвестная структура
-    return []
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
+    const data = await resp.json()
+    // Преобразуем формат если нужно
+    return data.map(org => ({
+      ...org,
+      id: org._id || org.id || Math.random().toString(36).slice(2),
+      ageGroups: org.ageGroups || [],
+      profile: org.profile || [],
+      services: org.services || [],
+      specialists: org.specialists || [],
+    }))
   } catch (e) {
-    error.value = `Ошибка загрузки ${url}: ${e.message || e}`
+    error.value = `Ошибка загрузки организаций: ${e.message || e}`
     return []
   }
 }
+
+onMounted(async () => {
+  municipalOrgs.value = await loadOrganizationsForPodvedomstvo('Муниципальные ОО')
+  correctionalOrgs.value = await loadOrganizationsForPodvedomstvo('Коррекционные ОО')
+  pmpkOrgs.value = await loadOrganizationsForPodvedomstvo('ПМПК')
+})
 </script>
 
 <style scoped>

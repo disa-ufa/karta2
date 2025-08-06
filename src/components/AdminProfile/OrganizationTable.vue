@@ -10,7 +10,8 @@ const props = defineProps({
   specialistOptions: Array,
   ageOptions: Array,
   isOrgChanged: Function,
-  pageSize: { type: Number, default: 25 }, // Добавлено: размер страницы
+  ministry: String,
+  pageSize: { type: Number, default: 25 }, // размер страницы
 })
 
 const emit = defineEmits(['saveOrg'])
@@ -51,15 +52,16 @@ function startResize(index, event) {
 function getColumnTitle(index) {
   return [
     'ID', 'Краткое наименование', 'Полное наименование',
-    'Адрес', 'Телефон', 'Сайт', 'Возрастные группы',
+    'Адрес', 'Телефон', 'Сайт', 'Возрастные группы', 'СВО',
     'Доступная среда', 'Профиль', 'Услуги', 'Специалисты', ''
   ][index] || ''
 }
 </script>
 
 <template>
-  <div class="table-scroll">
-    <table class="org-table" :style="{ minWidth: (columnWidths.reduce((a,b)=>a+b,0)+24) + 'px' }">
+  <div class="table-scroll-horizontal">
+    <table class="org-table"
+      :style="{ minWidth: (columnWidths.reduce((a,b)=>a+b,0)+24) + 'px', width: 'max-content' }">
       <thead>
         <tr>
           <th v-for="(width, colIndex) in columnWidths" :key="colIndex" :style="{ width: width + 'px', position: 'relative' }">
@@ -69,7 +71,7 @@ function getColumnTitle(index) {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="(org, rowIdx) in pagedOrgs" :key="org.id" class="virtual-row">
+        <tr v-for="(org, rowIdx) in pagedOrgs" :key="org._id || org.id || rowIdx" class="virtual-row">
           <OrganizationRow
             :org="org"
             :rowIdx="(currentPage-1)*pageSize + rowIdx"
@@ -78,22 +80,76 @@ function getColumnTitle(index) {
             :serviceOptions="serviceOptions"
             :specialistOptions="specialistOptions"
             :ageOptions="ageOptions"
+            :ministry="ministry"
             :isChanged="isOrgChanged"
             @save="(org, idx) => emit('saveOrg', org, idx)"
           />
         </tr>
       </tbody>
     </table>
-    <!-- Пагинация -->
-    <div class="org-pagination" v-if="totalPages > 1">
-      <button @click="gotoPage(currentPage-1)" :disabled="currentPage <= 1">&lt;</button>
-      <span>Стр. {{currentPage}} из {{totalPages}}</span>
-      <button @click="gotoPage(currentPage+1)" :disabled="currentPage >= totalPages">&gt;</button>
-    </div>
+  </div>
+  <!-- Пагинация выводится за пределы scroll -->
+  <div class="org-pagination" v-if="totalPages > 1">
+    <button @click="gotoPage(currentPage-1)" :disabled="currentPage <= 1">&lt;</button>
+    <span>Стр. {{currentPage}} из {{totalPages}}</span>
+    <button @click="gotoPage(currentPage+1)" :disabled="currentPage >= totalPages">&gt;</button>
   </div>
 </template>
 
 <style scoped>
+.table-scroll-horizontal {
+  width: 100vw;
+  max-width: 100vw;
+  overflow-x: auto;
+  overflow-y: visible;
+  background: #fafbfc;
+  box-sizing: border-box;
+  /* padding: 0 0 4px 0; */
+}
+.org-table {
+  width: max-content;
+  min-width: 1800px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #fafdff;
+}
+.org-table th,
+.org-table td {
+  border: 1px solid #eaeaea !important;
+  position: relative;
+  vertical-align: middle;
+  overflow: hidden;
+  height: 44px;
+  min-height: 44px;
+  max-height: 44px;
+}
+.org-table th {
+  background: #f3f8fb;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  user-select: none;
+  font-weight: 600;
+}
+/* Курсор для изменения размеров */
+.col-resize, .row-resize {
+  position: absolute;
+  user-select: none;
+  z-index: 1000;
+  background: transparent;
+}
+.col-resize {
+  width: 6px;
+  top: 0;
+  right: 0;
+  height: 100%;
+  cursor: col-resize;
+}
+.col-resize:hover,
+.row-resize:hover {
+  background: #d0ebff;
+}
 .org-pagination {
   display: flex;
   gap: 10px;
