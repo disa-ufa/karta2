@@ -60,6 +60,7 @@ const props = defineProps({
 
 const emit = defineEmits(['save'])
 
+// Услуги
 function getServicesOptions() {
   return SERVICES_OPTIONS[props.org.department] || DEFAULT_SERVICE_OPTIONS
 }
@@ -76,6 +77,7 @@ function toggleService(opt) {
   }
 }
 
+// Специалисты
 function getSpecialistsOptions() {
   return SPECIALIST_OPTIONS[props.org.department] || DEFAULT_SPECIALIST_OPTIONS
 }
@@ -92,7 +94,7 @@ function toggleSpecialist(opt) {
   }
 }
 
-// Возрастные группы (0-18, 18+), база: org.ageGroups (массив)
+// Возрастные группы
 function isAgeGroupChecked(age) {
   return Array.isArray(props.org.ageGroups) && props.org.ageGroups.includes(age)
 }
@@ -106,15 +108,15 @@ function toggleAgeGroup(age) {
   }
 }
 
-// СВО (Да/Нет), база: org.svo
+// СВО (Да/Нет) — регистр не важен!
 function getSvo() {
   return (props.org.svo || '').toLowerCase() === 'да' ? 'да' : 'нет'
 }
 function setSvo(val) {
-  props.org.svo = val
+  props.org.svo = val // сохраняем как есть, регистр не важен!
 }
 
-// Доступная среда (Да/Нет), любой регистр
+// Доступная среда (Да/Нет) — регистр не важен!
 function getAccessibility() {
   return (props.org.accessibility || '').toLowerCase() === 'да' ? 'да' : 'нет'
 }
@@ -122,7 +124,7 @@ function setAccessibility(val) {
   props.org.accessibility = val
 }
 
-// Профиль: общий список
+// Профиль
 function isProfileChecked(opt) {
   return Array.isArray(props.org.profile) && props.org.profile.includes(opt)
 }
@@ -188,15 +190,23 @@ function startRowResize(event) {
   <!-- СВО -->
   <td class="editable-cell">
     <div class="acc-radio-box">
-      <label><input type="radio" value="да" :checked="getSvo() === 'да'" @change="setSvo('да')" />Да</label>
-      <label><input type="radio" value="нет" :checked="getSvo() === 'нет'" @change="setSvo('нет')" />Нет</label>
+      <label :class="{ 'active-radio': getSvo() === 'да' }">
+        <input type="radio" value="да" :checked="getSvo() === 'да'" @change="setSvo('да')" />Да
+      </label>
+      <label :class="{ 'active-radio': getSvo() === 'нет' }">
+        <input type="radio" value="нет" :checked="getSvo() === 'нет'" @change="setSvo('нет')" />Нет
+      </label>
     </div>
   </td>
   <!-- Доступная среда -->
   <td class="editable-cell">
     <div class="acc-radio-box">
-      <label><input type="radio" value="да" :checked="getAccessibility() === 'да'" @change="setAccessibility('да')" />Да</label>
-      <label><input type="radio" value="нет" :checked="getAccessibility() === 'нет'" @change="setAccessibility('нет')" />Нет</label>
+      <label :class="{ 'active-radio': getAccessibility() === 'да' }">
+        <input type="radio" value="да" :checked="getAccessibility() === 'да'" @change="setAccessibility('да')" />Да
+      </label>
+      <label :class="{ 'active-radio': getAccessibility() === 'нет' }">
+        <input type="radio" value="нет" :checked="getAccessibility() === 'нет'" @change="setAccessibility('нет')" />Нет
+      </label>
     </div>
   </td>
   <!-- Профиль -->
@@ -259,6 +269,16 @@ function startRowResize(event) {
 .agelabel {
   font-size: 13px;
   white-space: nowrap;
+}
+.acc-radio-box label {
+  padding: 2px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.17s;
+}
+.acc-radio-box label.active-radio {
+  background: #cbefff;
+  font-weight: 500;
 }
 .save-btn {
   padding: 7px 15px;

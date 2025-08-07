@@ -11,7 +11,7 @@ const props = defineProps({
   ageOptions: Array,
   isOrgChanged: Function,
   ministry: String,
-  pageSize: { type: Number, default: 25 }, // размер страницы
+  pageSize: { type: Number, default: 25 },
 })
 
 const emit = defineEmits(['saveOrg'])
@@ -20,7 +20,6 @@ const currentPage = ref(1)
 const totalPages = computed(() =>
   Math.max(1, Math.ceil((props.organizations?.length || 0) / props.pageSize))
 )
-
 const pagedOrgs = computed(() => {
   const start = (currentPage.value - 1) * props.pageSize
   return props.organizations.slice(start, start + props.pageSize)
@@ -31,13 +30,11 @@ function gotoPage(page) {
   if (page > totalPages.value) page = totalPages.value
   currentPage.value = page
 }
-
 watch(() => props.organizations, () => { currentPage.value = 1 })
 
 function startResize(index, event) {
   const startX = event.clientX
   const startWidth = props.columnWidths[index]
-
   const onMouseMove = e => {
     props.columnWidths[index] = Math.max(startWidth + e.clientX - startX, 50)
   }
@@ -48,7 +45,6 @@ function startResize(index, event) {
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
 }
-
 function getColumnTitle(index) {
   return [
     'ID', 'Краткое наименование', 'Полное наименование',
@@ -56,120 +52,135 @@ function getColumnTitle(index) {
     'Доступная среда', 'Профиль', 'Услуги', 'Специалисты', ''
   ][index] || ''
 }
+
+// Пагинация с многоточием
+const pageNumbers = computed(() => {
+  const total = totalPages.value
+  const curr = currentPage.value
+  const pages = []
+  if (total <= 7) {
+    for (let i = 1; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    if (curr > 4) pages.push('...')
+    for (let i = Math.max(2, curr - 2); i <= Math.min(total - 1, curr + 2); i++) {
+      if (i > 1 && i < total) pages.push(i)
+    }
+    if (curr < total - 3) pages.push('...')
+    if (total > 1) pages.push(total)
+  }
+  return pages
+})
 </script>
 
 <template>
-  <div class="table-scroll-horizontal">
-    <table class="org-table"
-      :style="{ minWidth: (columnWidths.reduce((a,b)=>a+b,0)+24) + 'px', width: 'max-content' }">
-      <thead>
-        <tr>
-          <th v-for="(width, colIndex) in columnWidths" :key="colIndex" :style="{ width: width + 'px', position: 'relative' }">
-            {{ getColumnTitle(colIndex) }}
-            <span class="col-resize" @mousedown="startResize(colIndex, $event)"></span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(org, rowIdx) in pagedOrgs" :key="org._id || org.id || rowIdx" class="virtual-row">
-          <OrganizationRow
-            :org="org"
-            :rowIdx="(currentPage-1)*pageSize + rowIdx"
-            :columnWidths="columnWidths"
-            :profileOptions="profileOptions"
-            :serviceOptions="serviceOptions"
-            :specialistOptions="specialistOptions"
-            :ageOptions="ageOptions"
-            :ministry="ministry"
-            :isChanged="isOrgChanged"
-            @save="(org, idx) => emit('saveOrg', org, idx)"
-          />
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  <!-- Пагинация выводится за пределы scroll -->
-  <div class="org-pagination" v-if="totalPages > 1">
-    <button @click="gotoPage(currentPage-1)" :disabled="currentPage <= 1">&lt;</button>
-    <span>Стр. {{currentPage}} из {{totalPages}}</span>
-    <button @click="gotoPage(currentPage+1)" :disabled="currentPage >= totalPages">&gt;</button>
+  <div class="table-container-flex">
+    <!-- Скроллирующий контейнер. Не flex! -->
+    <div class="table-scroll-maxheight">
+      <table class="org-table"
+        :style="{ minWidth: (columnWidths.reduce((a,b)=>a+b,0)+24) + 'px', width: 'max-content' }">
+        <thead>
+          <tr>
+            <th v-for="(width, colIndex) in columnWidths" :key="colIndex" :style="{ width: width + 'px', position: 'relative' }">
+              {{ getColumnTitle(colIndex) }}
+              <span class="col-resize" @mousedown="startResize(colIndex, $event)"></span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(org, rowIdx) in pagedOrgs" :key="org._id || org.id || rowIdx" class="virtual-row">
+            <OrganizationRow
+              :org="org"
+              :rowIdx="(currentPage-1)*pageSize + rowIdx"
+              :columnWidths="columnWidths"
+              :profileOptions="profileOptions"
+              :serviceOptions="serviceOptions"
+              :specialistOptions="specialistOptions"
+              :ageOptions="ageOptions"
+              :ministry="ministry"
+              :isChanged="isOrgChanged"
+              @save="(org, idx) => emit('saveOrg', org, idx)"
+            />
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="org-pagination" v-if="totalPages > 1">
+      <button @click="gotoPage(currentPage-1)" :disabled="currentPage <= 1">&lt;</button>
+      <template v-for="page in pageNumbers" :key="page+'pg'">
+        <button
+          v-if="page !== '...'"
+          :class="['page-btn', { active: currentPage === page }]"
+          :disabled="currentPage === page"
+          @click="gotoPage(page)"
+        >{{ page }}</button>
+        <span v-else class="page-dots">...</span>
+      </template>
+      <button @click="gotoPage(currentPage+1)" :disabled="currentPage >= totalPages">&gt;</button>
+      <span class="page-info">Стр. {{currentPage}} из {{totalPages}}</span>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.table-scroll-horizontal {
-  width: 100vw;
-  max-width: 100vw;
-  overflow-x: auto;
-  overflow-y: visible;
-  background: #fafbfc;
-  box-sizing: border-box;
-  /* padding: 0 0 4px 0; */
-}
-.org-table {
-  width: max-content;
-  min-width: 1800px;
-  table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
-  background: #fafdff;
-}
-.org-table th,
-.org-table td {
-  border: 1px solid #eaeaea !important;
-  position: relative;
-  vertical-align: middle;
-  overflow: hidden;
-  height: 44px;
-  min-height: 44px;
-  max-height: 44px;
-}
-.org-table th {
-  background: #f3f8fb;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  user-select: none;
-  font-weight: 600;
-}
-/* Курсор для изменения размеров */
-.col-resize, .row-resize {
-  position: absolute;
-  user-select: none;
-  z-index: 1000;
-  background: transparent;
-}
-.col-resize {
-  width: 6px;
-  top: 0;
-  right: 0;
-  height: 100%;
-  cursor: col-resize;
-}
-.col-resize:hover,
-.row-resize:hover {
-  background: #d0ebff;
-}
-.org-pagination {
+.table-container-flex {
+  flex: 1 1 auto;
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Главное отличие: это НЕ flex, а просто блочный контейнер, max-height на всю доступную высоту страницы минус пагинация/шапка */
+.table-scroll-maxheight {
+  background: #fafbfc;
+  border-radius: 9px;
+  box-shadow: 0 2px 14px #0001;
+  overflow-y: auto;
+  overflow-x: auto;
+  min-height: 0;
+  /* ЭТО главное! */
+  max-height: calc(100vh - 230px); /* отрегулируй под высоту шапки, поиска и пагинации */
+}
+
+.org-pagination {
+  margin-top: 18px;
+  margin-bottom: 28px;
+  width: 100%;
+  display: flex;
+  gap: 4px;
   align-items: center;
   justify-content: center;
-  margin: 15px 0;
+  background: transparent;
 }
-.org-pagination button {
-  font-size: 16px;
-  padding: 5px 15px;
+.org-pagination button, .org-pagination .page-btn {
+  font-size: 15px;
+  padding: 5px 12px;
   border-radius: 7px;
   border: 1px solid #c0c0c0;
   background: #f7fafc;
   cursor: pointer;
-  transition: background .15s;
+  transition: background .15s, color .15s;
 }
-.org-pagination button:disabled {
+.org-pagination button:disabled, .org-pagination .page-btn:disabled {
   color: #bbb;
   border-color: #eee;
   background: #f5f5f5;
   cursor: default;
+}
+.org-pagination .page-btn.active {
+  background: #2474ca;
+  color: #fff;
+  border-color: #2474ca;
+  font-weight: bold;
+}
+.org-pagination .page-dots {
+  padding: 0 4px;
+  color: #aaa;
+  font-size: 17px;
+  user-select: none;
+}
+.org-pagination .page-info {
+  margin-left: 10px;
+  color: #6d7890;
+  font-size: 15px;
 }
 </style>

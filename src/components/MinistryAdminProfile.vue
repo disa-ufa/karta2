@@ -59,7 +59,7 @@ const error = ref('')
 const loading = ref(false)
 const search = ref('')
 const columnWidths = ref([
-  48, 250, 250, 210, 105, 100, 115, 95, 160, 220, 210, 100,
+  48, 250, 250, 210, 105, 100, 80, 80, 80, 220, 250, 350, 100
 ])
 const originalOrgs = ref([])
 
@@ -91,7 +91,7 @@ function getStringArray(val) {
   return []
 }
 
-// Сравнение для кнопки сохранения
+// ====== Сравнение для кнопки сохранения (исправлено сравнение СВО) ======
 function isOrgChanged(idx, org) {
   const orig = originalOrgs.value[idx]
   if (!orig) return false
@@ -99,7 +99,8 @@ function isOrgChanged(idx, org) {
     'name', 'full_name', 'address', 'phone', 'website'
   ].some(field => (org[field] || '') !== (orig[field] || '')) ||
     !arraysEqual(org.ageGroups || [], orig.ageGroups || []) ||
-    (org.svo || '') !== (orig.svo || '') ||
+    // исправленное сравнение для СВО (регистр не важен)
+    (org.svo || '').toLowerCase() !== (orig.svo || '').toLowerCase() ||
     (org.accessibility || '').toLowerCase() !== (orig.accessibility || '').toLowerCase() ||
     !arraysEqual(getProfileArray(org.profile), getProfileArray(orig.profile)) ||
     !arraysEqual(getStringArray(org.services), getStringArray(orig.services)) ||
@@ -182,7 +183,7 @@ onMounted(async () => {
     </div>
     <br>
     <SearchBox v-model="search" :count="filteredOrgs.length" />
-    <h3 class="orgs-title">Организации ведомства</h3>
+    
     <div class="table-container-flex">
       <EducationMinistryTabs v-if="admin.ministry === 'Министерство просвещения Р.Б.'" />
       <template v-else>
@@ -203,6 +204,5 @@ onMounted(async () => {
     </div>
   </div>
 </template>
-
 
 <style src="./AdminProfile/styles.css"></style>

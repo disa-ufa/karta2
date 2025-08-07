@@ -56,7 +56,7 @@ const pmpkOrgs = ref([])
 const error = ref('')
 
 const tableProps = {
-  columnWidths: [48, 250, 250, 210, 105, 100, 150, 110, 260, 280, 300, 108],
+  columnWidths: [48, 250, 250, 210, 105, 100, 150, 110, 110, 280, 300, 300, 100],
   profileOptions: [],
   serviceOptions: [],
   specialistOptions: [],

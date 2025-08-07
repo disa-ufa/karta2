@@ -1,3 +1,5 @@
+
+
 /* ---- Общие сбросы для таблицы ---- */
 .org-table,
 .org-table th,
@@ -38,9 +40,23 @@ input.cell-input {
   background: #f3f8fb;
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 10;    /* Повысил z-index для уверенности */
   user-select: none;
   font-weight: 600;
+  /* Рекомендация: можно добавить тень для эффекта "закрепления" */
+  /* box-shadow: 0 2px 6px #c3c3c345; */
+}
+
+/* ---- Контейнер для скролла ---- */
+.table-scroll-horizontal {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  background: #fafbfc;
+  border-radius: 9px;
+  box-shadow: 0 2px 14px #0001;
+  /* УБЕРИ max-height! */
 }
 
 /* ---- Тело таблицы ---- */
@@ -145,6 +161,7 @@ textarea.cell-area {
 
 /* ---- Остальное оформление ---- */
 .admin-profile-full {
+  min-height: 100vh;
   position: fixed;
   inset: 0;
   background: #f4faf7;
@@ -188,17 +205,10 @@ textarea.cell-area {
   font-weight: 600;
 }
 .table-container-flex {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-}
-.table-scroll {
-  flex: 1;
-  overflow: auto;
-  background: #fafbfc;
-  border-radius: 9px;
-  box-shadow: 0 2px 14px #0001;
+  min-height: 0;
 }
 .loading-bar {
   margin: 50px auto;
